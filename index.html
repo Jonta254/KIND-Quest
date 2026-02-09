@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KIND Quest | Daily Mission</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .reward-pop { animation: rewardPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(15px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        @keyframes rewardPop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl shadow-teal-100/50 p-8 border border-white relative overflow-hidden">
+        
+        <div class="flex justify-between items-center mb-10">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🌱</span>
+                <span class="font-bold text-slate-800 tracking-tight">KIND Quest</span>
+            </div>
+            <div class="bg-amber-50 px-4 py-1.5 rounded-full border border-amber-100 flex items-center gap-2">
+                <div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                <span id="kindBalance" class="text-amber-600 font-bold text-sm">0 $KIND</span>
+            </div>
+        </div>
+
+        <div id="content" class="fade-in">
+            </div>
+
+        <div class="absolute -bottom-10 -right-10 w-32 h-32 bg-teal-50 rounded-full blur-3xl -z-10"></div>
+    </div>
+
+    <script>
+        // --- HARDCODED QUEST DATABASE ---
+        const QUEST_LIBRARY = [
+            { 
+                day: "Sunday",
+                scenario: "You receive a 'wrong number' text from someone who sounds very stressed about a family meeting.",
+                options: [
+                    { id: 'a', text: "Reply: 'Wrong number, but I hope your meeting goes well!'", kind: true },
+                    { id: 'b', text: "Block the number immediately.", kind: false },
+                    { id: 'c', text: "Ignore it and delete the thread.", kind: false }
+                ]
+            },
+            { 
+                day: "Monday",
+                scenario: "You’re at a grocery store. The person behind you has only two items and looks like they are in a huge rush.",
+                options: [
+                    { id: 'a', text: "Let them go ahead of you.", kind: true },
+                    { id: 'b', text: "Look away and keep your spot.", kind: false },
+                    { id: 'c', text: "Tell them they should have come earlier.", kind: false }
+                ]
+            },
+            { 
+                day: "Tuesday",
+                scenario: "A friend posts a photo of a project they worked hard on, but it has a small, obvious mistake.",
+                options: [
+                    { id: 'a', text: "Point out the mistake in the comments.", kind: false },
+                    { id: 'b', text: "Send a private message praising their effort.", kind: true },
+                    { id: 'c', text: "Ignore the post entirely.", kind: false }
+                ]
+            },
+            { 
+                day: "Wednesday",
+                scenario: "You find a lost umbrella inside a building on a very rainy afternoon.",
+                options: [
+                    { id: 'a', text: "Take it for yourself.", kind: false },
+                    { id: 'b', text: "Leave it where it is.", kind: false },
+                    { id: 'c', text: "Hand it to the front desk or lost & found.", true: true, kind: true }
+                ]
+            },
+            { 
+                day: "Thursday",
+                scenario: "An elderly neighbor is struggling to carry a heavy trash bag to the curb.",
+                options: [
+                    { id: 'a', text: "Wave and say 'Good morning!'", kind: false },
+                    { id: 'b', text: "Offer to take the bag for them.", kind: true },
+                    { id: 'c', text: "Pretend you didn't see them.", kind: false }
+                ]
+            },
+            { 
+                day: "Friday",
+                scenario: "You’re in a group chat and someone makes a joke that clearly makes another person feel uncomfortable.",
+                options: [
+                    { id: 'a', text: "Change the subject to something positive.", kind: true },
+                    { id: 'b', text: "Laugh so it’s not awkward.", kind: false },
+                    { id: 'c', text: "Add another joke to fit in.", kind: false }
+                ]
+            },
+            { 
+                day: "Saturday",
+                scenario: "You’re at a local park and notice a plastic bottle sitting right next to an empty trash can.",
+                options: [
+                    { id: 'a', text: "Pick it up and drop it in the bin.", kind: true },
+                    { id: 'b', text: "Walk past it; you didn't drop it.", kind: false },
+                    { id: 'c', text: "Complain about 'people today.'", kind: false }
+                ]
+            }
+        ];
+
+        // --- APP STATE ---
+        const dayIndex = new Date().getDay(); 
+        const DAILY_QUEST = QUEST_LIBRARY[dayIndex];
+        const ENTRY_FEE = "0.1 $WLD";
+        const REWARD_AMOUNT = 10;
+
+        let state = {
+            status: 'LOCKED', // LOCKED, ACTIVE, COMPLETED
+            balance: 0
+        };
+
+        const contentEl = document.getElementById('content');
+        const balanceEl = document.getElementById('kindBalance');
+
+        // --- RENDER ENGINE ---
+        function render() {
+            // Clear content for a fresh fade-in
+            contentEl.classList.remove('fade-in');
+            void contentEl.offsetWidth; // Trigger reflow
+            contentEl.classList.add('fade-in');
+
+            if (state.status === 'LOCKED') {
+                contentEl.innerHTML = `
+                    <div class="text-center space-y-6">
+                        <div class="py-8">
+                            <div class="text-6xl mb-4">🎁</div>
+                            <h2 class="text-xl font-bold text-slate-800">${DAILY_QUEST.day}'s Mission</h2>
+                            <p class="text-slate-500 mt-2 text-sm leading-relaxed">Spend a little $WLD to unlock today's kindness challenge.</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-2xl p-5 flex justify-between items-center border border-slate-100">
+                            <span class="text-slate-500 text-sm font-semibold uppercase tracking-wider">Entry Fee</span>
+                            <span class="text-teal-600 font-black text-lg">${ENTRY_FEE}</span>
+                        </div>
+                        <button onclick="unlockQuest()" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-teal-200 active:scale-[0.98]">
+                            Unlock Quest
+                        </button>
+                    </div>
+                `;
+            } 
+            
+            else if (state.status === 'ACTIVE') {
+                contentEl.innerHTML = `
+                    <div class="space-y-8">
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-teal-400 h-full w-2/3 animate-pulse"></div>
+                        </div>
+                        <h2 class="text-lg font-medium text-slate-800 leading-relaxed italic text-center px-2">
+                            "${DAILY_QUEST.scenario}"
+                        </h2>
+                        <div class="space-y-3">
+                            ${DAILY_QUEST.options.map(opt => `
+                                <button onclick="handleChoice('${opt.id}', ${opt.kind})" class="w-full text-left p-4 rounded-2xl border-2 border-slate-100 hover:border-teal-200 hover:bg-teal-50 transition-all text-slate-700 font-medium">
+                                    ${opt.text}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            else if (state.status === 'COMPLETED') {
+                contentEl.innerHTML = `
+                    <div class="text-center space-y-6 reward-pop">
+                        <div class="text-6xl mb-4">🌍</div>
+                        <h2 class="text-2xl font-bold text-slate-800 tracking-tight">Mission Accomplished</h2>
+                        
+                        <div class="bg-gradient-to-br from-amber-400 to-orange-400 text-white p-8 rounded-[2.5rem] shadow-xl shadow-amber-200 relative overflow-hidden">
+                            <p class="text-xs uppercase tracking-[0.2em] font-bold opacity-90">Daily Reward</p>
+                            <p class="text-5xl font-black mt-2">+${REWARD_AMOUNT}</p>
+                            <p class="text-sm font-bold opacity-80 mt-1">$KIND TOKENS</p>
+                            <div class="absolute -top-4 -left-4 w-12 h-12 bg-white opacity-10 rounded-full"></div>
+                        </div>
+
+                        <p class="text-slate-500 font-medium italic px-4">"Nice choice — you made the world a little brighter today."</p>
+                        
+                        <div class="pt-4">
+                             <button disabled class="w-full bg-slate-100 text-slate-400 font-semibold py-4 rounded-2xl cursor-not-allowed">
+                                Mission Reset in 14h 22m
+                            </button>
+                        </div>
+                    </div>
+                `;
+                balanceEl.innerText = `${state.balance} $KIND`;
+            }
+        }
+
+        // --- ACTIONS ---
+        window.unlockQuest = () => {
+            // Future integration: World ID transaction goes here
+            state.status = 'ACTIVE';
+            render();
+        };
+
+        window.handleChoice = (id, isKind) => {
+            if (isKind) {
+                state.balance += REWARD_AMOUNT;
+                state.status = 'COMPLETED';
+                render();
+            } else {
+                alert("That's one way to handle it, but try to find the kindest path! ❤️");
+            }
+        };
+
+        // Initial Boot
+        render();
+    </script>
+</body>
+</html>
